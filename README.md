@@ -1,4 +1,4 @@
-# @shuji-bonji/ifc-core-mcp
+# IFC Core MCP Server
 
 [![npm version](https://img.shields.io/npm/v/@shuji-bonji/ifc-core-mcp)](https://www.npmjs.com/package/@shuji-bonji/ifc-core-mcp)
 [![CI](https://github.com/shuji-bonji/ifc-core-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/shuji-bonji/ifc-core-mcp/actions/workflows/ci.yml)
