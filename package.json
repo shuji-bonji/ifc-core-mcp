@@ -1,6 +1,6 @@
 {
   "name": "@shuji-bonji/ifc-core-mcp",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "MCP server for IFC4.3 specification reference - search and retrieve IFC entity definitions, attributes, inheritance, and PropertySets",
   "type": "module",
   "main": "dist/index.js",
@@ -27,7 +27,7 @@
     "test:coverage": "vitest run --coverage",
     "test:e2e": "vitest run tests/e2e/",
     "test:unit": "vitest run tests/unit/",
-    "prepare-data": "python3 scripts/convert_express_to_json.py && python3 scripts/build_markdown_index.py",
+    "prepare-data": "python3 scripts/convert_express_to_json.py && python3 scripts/build_markdown_index.py && node scripts/build_propertyset_defs.mjs",
     "prepublishOnly": "npm run build"
   },
   "engines": {

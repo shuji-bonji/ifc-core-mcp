@@ -36,6 +36,56 @@ export function formatAttribute(attr: DirectAttribute): string {
   return `${attr.name} : ${opt}${typeRefToString(attr.type)}`;
 }
 
+// ── 検索スコアリング ────────────────────────────────────
+
+/** 検索スコア定数 */
+export const SEARCH_SCORE = {
+  /** エンティティ名が完全一致（case-insensitive）例: "Wall" → "IfcWall" の場合は前方一致 */
+  NAME_EXACT: 100,
+  /** エンティティ名が "Ifc" + query で完全一致（case-insensitive）*/
+  NAME_IFC_EXACT: 95,
+  /** エンティティ名が前方一致（case-insensitive）例: "IfcWall" → "IfcWallStandardCase" */
+  NAME_PREFIX: 80,
+  /** エンティティ名に部分一致 例: "IfcCurtainWall" に "Wall" が含まれる */
+  NAME_CONTAINS: 60,
+  /** 説明文にキーワードが含まれる */
+  DESCRIPTION_MATCH: 20,
+  /** マッチしない */
+  NO_MATCH: 0,
+} as const;
+
+/**
+ * 検索クエリに対するスコアを計算する。
+ * 名前完全一致 > IFC名完全一致 > 名前前方一致 > 名前部分一致 > 説明文一致。
+ */
+export function calculateSearchScore(
+  name: string,
+  shortDefinition: string | undefined,
+  query: string,
+): number {
+  const nameLower = name.toLowerCase();
+  const q = query.toLowerCase();
+
+  // 名前が完全一致（case-insensitive）
+  if (nameLower === q) return SEARCH_SCORE.NAME_EXACT;
+
+  // "Ifc" + query が名前と完全一致（"Wall" → "IfcWall"）
+  if (nameLower === `ifc${q}`) return SEARCH_SCORE.NAME_IFC_EXACT;
+
+  // 名前が query で始まる、または "Ifc" + query で始まる
+  if (nameLower.startsWith(q) || nameLower.startsWith(`ifc${q}`)) {
+    return SEARCH_SCORE.NAME_PREFIX;
+  }
+
+  // 名前に query が含まれる
+  if (nameLower.includes(q)) return SEARCH_SCORE.NAME_CONTAINS;
+
+  // 説明文に query が含まれる
+  if (shortDefinition?.toLowerCase().includes(q)) return SEARCH_SCORE.DESCRIPTION_MATCH;
+
+  return SEARCH_SCORE.NO_MATCH;
+}
+
 /**
  * ページネーション情報を含む出力オブジェクトを生成する。
  */

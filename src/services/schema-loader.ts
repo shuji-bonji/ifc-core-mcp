@@ -18,6 +18,8 @@ import type {
   DescriptionFullData,
   DescriptionEntry,
   DescriptionFullEntry,
+  PropertySetDefsData,
+  PropertySetDefinition,
 } from "../types.js";
 import {
   SERVER_NAME,
@@ -25,7 +27,11 @@ import {
   SCHEMA_FILE,
   DESC_INDEX_FILE,
   DESC_FULL_FILE,
+  PSET_DEFS_FILE,
+  SCHEMA_ID_DEV_PATTERN,
+  SCHEMA_ID_RELEASE,
 } from "../constants.js";
+import { calculateSearchScore } from "../utils/format-helper.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -38,6 +44,7 @@ const DATA_DIR = resolve(__dirname, DATA_DIR_RELATIVE);
 let schemaData: IfcSchemaData | null = null;
 let descIndex: DescriptionIndex | null = null;
 let descFull: DescriptionFullData | null = null;
+let psetDefs: PropertySetDefsData | null = null;
 
 // ── 検索インデックス（Map ベースで O(1) ルックアップ）──
 
@@ -71,6 +78,15 @@ export function initialize(): void {
   schemaData = loadJsonFile<IfcSchemaData>(SCHEMA_FILE);
   descIndex = loadJsonFile<DescriptionIndex>(DESC_INDEX_FILE);
   descFull = loadJsonFile<DescriptionFullData>(DESC_FULL_FILE);
+  psetDefs = loadJsonFile<PropertySetDefsData>(PSET_DEFS_FILE);
+
+  // WHERE ルール内の開発版スキーマ ID を正式版に正規化
+  // 例: 'IFC4X3_DEV_923b0514.IFCWALLTYPE' → 'IFC4X3_ADD2.IFCWALLTYPE'
+  for (const entity of schemaData.entities) {
+    for (const rule of entity.whereRules) {
+      rule.expression = rule.expression.replace(SCHEMA_ID_DEV_PATTERN, SCHEMA_ID_RELEASE);
+    }
+  }
 
   // エンティティのインデックスを構築
   for (const entity of schemaData.entities) {
@@ -111,7 +127,10 @@ export function getEntity(name: string): IfcEntity | undefined {
 
 /**
  * キーワードでエンティティを検索する。
- * 名前と説明文の両方を対象にする。
+ * 名前と説明文の両方を対象にし、関連度スコアでソートする。
+ *
+ * スコア優先順位:
+ *   名前完全一致 > Ifc+名前完全一致 > 名前前方一致 > 名前部分一致 > 説明文一致
  */
 export function searchEntities(
   query: string,
@@ -122,19 +141,21 @@ export function searchEntities(
   total: number;
   hasMore: boolean;
 } {
-  const q = query.toLowerCase();
+  const scored: { entity: IfcEntity; score: number }[] = [];
 
-  const matched = schemaData!.entities.filter((e) => {
-    if (e.name.toLowerCase().includes(q)) return true;
-
+  for (const e of schemaData!.entities) {
     const desc = descIndex?.index.entities[e.name];
-    if (desc?.shortDefinition.toLowerCase().includes(q)) return true;
+    const score = calculateSearchScore(e.name, desc?.shortDefinition, query);
+    if (score > 0) {
+      scored.push({ entity: e, score });
+    }
+  }
 
-    return false;
-  });
+  // スコア降順 → 同スコア内は名前昇順
+  scored.sort((a, b) => b.score - a.score || a.entity.name.localeCompare(b.entity.name));
 
-  const total = matched.length;
-  const results = matched.slice(offset, offset + limit);
+  const total = scored.length;
+  const results = scored.slice(offset, offset + limit).map((s) => s.entity);
 
   return { results, total, hasMore: total > offset + limit };
 }
@@ -175,11 +196,19 @@ export function getPropertySetDescription(name: string): DescriptionFullEntry | 
   return descFull?.data.propertySets[name];
 }
 
+/**
+ * PropertySet のプロパティ定義（名前・型・説明）を取得する。
+ */
+export function getPropertySetDefinition(name: string): PropertySetDefinition | undefined {
+  return psetDefs?.propertySets[name];
+}
+
 // ── PropertySet 検索 ────────────────────────────────
 
 /**
  * キーワードで PropertySet を検索する。
  * キャッシュ済み配列を使い Object.values() の繰り返し呼び出しを回避。
+ * 名前一致を優先するスコアリングでソートする。
  */
 export function searchPropertySets(
   query: string,
@@ -192,16 +221,20 @@ export function searchPropertySets(
 } {
   if (!propertySetArray) return { results: [], total: 0, hasMore: false };
 
-  const q = query.toLowerCase();
+  const scored: { entry: DescriptionEntry; score: number }[] = [];
 
-  const matched = propertySetArray.filter((ps) => {
-    if (ps.name.toLowerCase().includes(q)) return true;
-    if (ps.shortDefinition.toLowerCase().includes(q)) return true;
-    return false;
-  });
+  for (const ps of propertySetArray) {
+    const score = calculateSearchScore(ps.name, ps.shortDefinition, query);
+    if (score > 0) {
+      scored.push({ entry: ps, score });
+    }
+  }
 
-  const total = matched.length;
-  const results = matched.slice(offset, offset + limit);
+  // スコア降順 → 同スコア内は名前昇順
+  scored.sort((a, b) => b.score - a.score || a.entry.name.localeCompare(b.entry.name));
+
+  const total = scored.length;
+  const results = scored.slice(offset, offset + limit).map((s) => s.entry);
 
   return { results, total, hasMore: total > offset + limit };
 }

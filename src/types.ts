@@ -215,6 +215,29 @@ export interface DescriptionFullData {
   };
 }
 
+// ── PropertySet プロパティ定義 ────────────────────────
+
+export interface PropertySetProperty {
+  name: string;
+  dataType: string | null;
+  valueKind: string;
+  ifcType: string | null;
+  description: string | null;
+}
+
+export interface PropertySetDefinition {
+  properties: PropertySetProperty[];
+  applicableEntities: string[];
+}
+
+export interface PropertySetDefsData {
+  $schema: string;
+  generatedAt: string;
+  generator: string;
+  statistics: { propertySets: number; properties: number };
+  propertySets: Record<string, PropertySetDefinition>;
+}
+
 // ── レスポンス形式 ────────────────────────────────────
 
 export enum ResponseFormat {

@@ -14,7 +14,10 @@ import {
   SCHEMA_FILE,
   DESC_INDEX_FILE,
   DESC_FULL_FILE,
+  PSET_DEFS_FILE,
   ENTITY_DOC_SECTIONS,
+  SCHEMA_ID_DEV_PATTERN,
+  SCHEMA_ID_RELEASE,
 } from "../../src/constants.js";
 
 describe("constants", () => {
@@ -44,6 +47,16 @@ describe("constants", () => {
     expect(SCHEMA_FILE).toMatch(/\.json$/);
     expect(DESC_INDEX_FILE).toMatch(/\.json$/);
     expect(DESC_FULL_FILE).toMatch(/\.json$/);
+    expect(PSET_DEFS_FILE).toMatch(/\.json$/);
+  });
+
+  it("should have schema ID normalization constants", () => {
+    expect(SCHEMA_ID_DEV_PATTERN).toBeInstanceOf(RegExp);
+    expect(SCHEMA_ID_RELEASE).toBe("IFC4X3_ADD2");
+    // パターンが開発版 ID にマッチすることを確認
+    expect("IFC4X3_DEV_923b0514".match(SCHEMA_ID_DEV_PATTERN)).toBeTruthy();
+    // リリース版にはマッチしないことを確認
+    expect("IFC4X3_ADD2".match(SCHEMA_ID_DEV_PATTERN)).toBeNull();
   });
 
   it("should have entity doc sections", () => {

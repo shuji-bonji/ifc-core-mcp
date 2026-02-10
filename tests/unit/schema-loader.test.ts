@@ -16,6 +16,7 @@ import {
   getEntityFullDescription,
   getTypeDescription,
   getPropertySetDescription,
+  getPropertySetDefinition,
   searchPropertySets,
   getInheritanceTree,
   getAncestorChain,
@@ -146,6 +147,22 @@ describe("searchEntities", () => {
     expect(results.length).toBe(0);
     expect(total).toBe(0);
   });
+
+  it("should rank exact name matches highest", () => {
+    const { results } = searchEntities("Wall", 15);
+    // IfcWall should be first (Ifc+query exact match)
+    expect(results[0].name).toBe("IfcWall");
+  });
+
+  it("should rank name prefix matches before description matches", () => {
+    const { results } = searchEntities("Wall", 15);
+    const wallIndex = results.findIndex((e) => e.name === "IfcWall");
+    const wallTypeIndex = results.findIndex((e) => e.name === "IfcWallType");
+    const curtainWallIndex = results.findIndex((e) => e.name === "IfcCurtainWall");
+    // IfcWall (exact) < IfcWallType (prefix) < IfcCurtainWall (contains)
+    expect(wallIndex).toBeLessThan(wallTypeIndex);
+    expect(wallTypeIndex).toBeLessThan(curtainWallIndex);
+  });
 });
 
 // ── getTypeDeclaration ──────────────────────────────────
@@ -243,6 +260,37 @@ describe("getPropertySetDescription", () => {
   });
 });
 
+describe("getPropertySetDefinition", () => {
+  it("should return property definitions for known PropertySet", () => {
+    const def = getPropertySetDefinition("Pset_WallCommon");
+    expect(def).toBeDefined();
+    expect(def!.properties.length).toBeGreaterThan(0);
+    // Known properties of Pset_WallCommon
+    const propNames = def!.properties.map((p) => p.name);
+    expect(propNames).toContain("IsExternal");
+    expect(propNames).toContain("LoadBearing");
+    expect(propNames).toContain("ThermalTransmittance");
+  });
+
+  it("should include property type information", () => {
+    const def = getPropertySetDefinition("Pset_WallCommon");
+    const isExternal = def!.properties.find((p) => p.name === "IsExternal");
+    expect(isExternal).toBeDefined();
+    expect(isExternal!.dataType).toBe("Boolean");
+    expect(isExternal!.ifcType).toBe("IfcBoolean");
+    expect(isExternal!.valueKind).toBe("Single");
+  });
+
+  it("should include applicable entities", () => {
+    const def = getPropertySetDefinition("Pset_WallCommon");
+    expect(def!.applicableEntities).toContain("IfcWall");
+  });
+
+  it("should return undefined for unknown PropertySet", () => {
+    expect(getPropertySetDefinition("Pset_NotExist")).toBeUndefined();
+  });
+});
+
 describe("searchPropertySets", () => {
   it("should find PropertySets by keyword", () => {
     const { results, total } = searchPropertySets("Wall");
@@ -308,5 +356,33 @@ describe("getAncestorChain", () => {
 
   it("should return empty for unknown entity", () => {
     expect(getAncestorChain("NotAnEntity")).toEqual([]);
+  });
+});
+
+// ── WHERE rule normalization ─────────────────────────────
+
+describe("WHERE rule schema ID normalization", () => {
+  it("should normalize DEV schema ID to ADD2 in IfcWall WHERE rules", () => {
+    const wall = getEntity("IfcWall");
+    expect(wall).toBeDefined();
+    const typeRule = wall!.whereRules.find((r) => r.name === "CorrectTypeAssigned");
+    if (typeRule) {
+      expect(typeRule.expression).toContain("IFC4X3_ADD2");
+      expect(typeRule.expression).not.toContain("IFC4X3_DEV_");
+    }
+  });
+
+  it("should normalize all WHERE rules across all entities", () => {
+    // 全エンティティの WHERE ルールに _DEV_ が残っていないことを確認
+    const stats = getStatistics();
+    expect(stats.entities).toBeGreaterThan(0);
+
+    // IfcBeam も確認
+    const beam = getEntity("IfcBeam");
+    if (beam) {
+      for (const rule of beam.whereRules) {
+        expect(rule.expression).not.toContain("IFC4X3_DEV_");
+      }
+    }
   });
 });

@@ -5,7 +5,11 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { ResponseFormat } from "../types.js";
-import { getPropertySetDescription, searchPropertySets } from "../services/schema-loader.js";
+import {
+  getPropertySetDescription,
+  getPropertySetDefinition,
+  searchPropertySets,
+} from "../services/schema-loader.js";
 import { responseFormatSchema, limitSchema, offsetSchema } from "../utils/zod-schemas.js";
 import {
   createTextResponse,
@@ -47,6 +51,9 @@ function handleGetMode(params: Input) {
     );
   }
 
+  // プロパティ定義を取得（存在すれば）
+  const psetDef = getPropertySetDefinition(params.name);
+
   if (params.response_format === ResponseFormat.JSON) {
     return createJsonResponse({
       name: pset.name,
@@ -55,6 +62,8 @@ function handleGetMode(params: Input) {
       shortDefinition: pset.shortDefinition,
       history: pset.history,
       sections: pset.sections,
+      properties: psetDef?.properties ?? [],
+      applicableEntities: psetDef?.applicableEntities ?? [],
     });
   }
 
@@ -64,13 +73,35 @@ function handleGetMode(params: Input) {
   if (pset.shortDefinition) {
     lines.push(pset.shortDefinition, "");
   }
-  lines.push(`- **Layer**: ${pset.layer} / ${pset.schema}`, "");
+  lines.push(`- **Layer**: ${pset.layer} / ${pset.schema}`);
+
+  // 適用先エンティティ
+  if (psetDef?.applicableEntities && psetDef.applicableEntities.length > 0) {
+    lines.push(`- **Applicable to**: ${psetDef.applicableEntities.join(", ")}`);
+  }
+  lines.push("");
+
+  // プロパティ一覧テーブル
+  if (psetDef?.properties && psetDef.properties.length > 0) {
+    lines.push("## Properties", "");
+    lines.push("| Property | Data Type | IFC Type | Value Kind |");
+    lines.push("|----------|-----------|----------|------------|");
+    for (const prop of psetDef.properties) {
+      const dataType = prop.dataType ?? "-";
+      const ifcType = prop.ifcType ?? "-";
+      lines.push(`| ${prop.name} | ${dataType} | ${ifcType} | ${prop.valueKind} |`);
+    }
+    lines.push("");
+  }
 
   // fullText にはタイトル行が含まれるので除去して本文のみ追加
   if (pset.fullText) {
     const bodyStart = pset.fullText.indexOf("\n");
     if (bodyStart !== -1) {
-      lines.push(pset.fullText.substring(bodyStart + 1).trim());
+      const body = pset.fullText.substring(bodyStart + 1).trim();
+      if (body) {
+        lines.push("## Description", "", body);
+      }
     }
   }
 
@@ -86,12 +117,16 @@ function handleSearchMode(params: Input) {
     return createTextResponse(`No PropertySets found matching '${params.name}'.`);
   }
 
-  const propertySets = results.map((ps) => ({
-    name: ps.name,
-    layer: ps.layer,
-    schema: ps.schema,
-    shortDefinition: ps.shortDefinition,
-  }));
+  const propertySets = results.map((ps) => {
+    const def = getPropertySetDefinition(ps.name);
+    return {
+      name: ps.name,
+      layer: ps.layer,
+      schema: ps.schema,
+      shortDefinition: ps.shortDefinition,
+      propertyCount: def?.properties.length ?? 0,
+    };
+  });
 
   if (params.response_format === ResponseFormat.JSON) {
     return createJsonResponse({
@@ -108,6 +143,7 @@ function handleSearchMode(params: Input) {
   for (const ps of propertySets) {
     lines.push(`## ${ps.name}`);
     lines.push(`- **Layer**: ${ps.layer} / ${ps.schema}`);
+    if (ps.propertyCount > 0) lines.push(`- **Properties**: ${ps.propertyCount}`);
     if (ps.shortDefinition) lines.push(`- ${ps.shortDefinition}`);
     lines.push("");
   }
@@ -130,7 +166,7 @@ export function registerGetPropertySet(server: McpServer): void {
       title: "Get IFC PropertySet Definition",
       description: `Get or search IFC4.3 PropertySet definitions.
 
-In 'get' mode, retrieves the full definition of a named PropertySet.
+In 'get' mode, retrieves the full definition of a named PropertySet including individual property names, data types, and IFC type mappings.
 In 'search' mode, searches PropertySets by keyword.
 
 Args:
@@ -141,10 +177,10 @@ Args:
   - response_format ('markdown' | 'json'): Output format (default: 'markdown')
 
 Returns:
-  PropertySet definition with properties and descriptions.
+  PropertySet definition with properties (name, dataType, ifcType, valueKind) and descriptions.
 
 Examples:
-  - name="Pset_WallCommon", mode="get" → Full PropertySet definition
+  - name="Pset_WallCommon", mode="get" → Full PropertySet definition with 10 properties
   - name="Wall", mode="search" → All PropertySets related to walls
   - name="thermal", mode="search" → PropertySets with thermal properties`,
       inputSchema: InputSchema,

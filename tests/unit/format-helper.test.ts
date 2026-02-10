@@ -7,6 +7,8 @@ import {
   typeRefToString,
   formatAttribute,
   buildPaginationMeta,
+  calculateSearchScore,
+  SEARCH_SCORE,
 } from "../../src/utils/format-helper.js";
 
 describe("typeRefToString", () => {
@@ -68,5 +70,46 @@ describe("buildPaginationMeta", () => {
     const meta = buildPaginationMeta(5, 5, 0, false);
     expect(meta.hasMore).toBe(false);
     expect(meta.nextOffset).toBeUndefined();
+  });
+});
+
+describe("calculateSearchScore", () => {
+  it("should return NAME_EXACT for exact name match (case-insensitive)", () => {
+    expect(calculateSearchScore("IfcWall", undefined, "IfcWall")).toBe(SEARCH_SCORE.NAME_EXACT);
+    expect(calculateSearchScore("IfcWall", undefined, "ifcwall")).toBe(SEARCH_SCORE.NAME_EXACT);
+  });
+
+  it("should return NAME_IFC_EXACT for Ifc+query exact match", () => {
+    expect(calculateSearchScore("IfcWall", undefined, "Wall")).toBe(SEARCH_SCORE.NAME_IFC_EXACT);
+    expect(calculateSearchScore("IfcWall", undefined, "wall")).toBe(SEARCH_SCORE.NAME_IFC_EXACT);
+  });
+
+  it("should return NAME_PREFIX for prefix match", () => {
+    expect(calculateSearchScore("IfcWallStandardCase", undefined, "Wall")).toBe(
+      SEARCH_SCORE.NAME_PREFIX,
+    );
+    expect(calculateSearchScore("IfcWallType", undefined, "wall")).toBe(SEARCH_SCORE.NAME_PREFIX);
+  });
+
+  it("should return NAME_CONTAINS for substring match", () => {
+    expect(calculateSearchScore("IfcCurtainWall", undefined, "Wall")).toBe(
+      SEARCH_SCORE.NAME_CONTAINS,
+    );
+  });
+
+  it("should return DESCRIPTION_MATCH for description-only match", () => {
+    expect(calculateSearchScore("IfcDoor", "A door in a wall partition", "wall")).toBe(
+      SEARCH_SCORE.DESCRIPTION_MATCH,
+    );
+  });
+
+  it("should return NO_MATCH when nothing matches", () => {
+    expect(calculateSearchScore("IfcWall", "A wall element", "beam")).toBe(SEARCH_SCORE.NO_MATCH);
+  });
+
+  it("should prefer name match over description match", () => {
+    const nameScore = calculateSearchScore("IfcCurtainWall", undefined, "Wall");
+    const descScore = calculateSearchScore("IfcDoor", "A door in a wall partition", "Wall");
+    expect(nameScore).toBeGreaterThan(descScore);
   });
 });
