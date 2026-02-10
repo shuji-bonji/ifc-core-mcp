@@ -5,13 +5,14 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { ResponseFormat } from "../types.js";
-import { CHARACTER_LIMIT } from "../constants.js";
 import {
   getEntity,
   getInheritanceTree,
   getAncestorChain,
   type InheritanceNode,
 } from "../services/schema-loader.js";
+import { responseFormatSchema } from "../utils/zod-schemas.js";
+import { createTextResponse, createNotFoundError } from "../utils/response-helper.js";
 
 const InputSchema = z
   .object({
@@ -30,15 +31,15 @@ const InputSchema = z
       .max(10)
       .default(3)
       .describe("Maximum depth for descendant tree (default: 3)"),
-    response_format: z
-      .nativeEnum(ResponseFormat)
-      .default(ResponseFormat.MARKDOWN)
-      .describe("Output format: 'markdown' or 'json'"),
+    response_format: responseFormatSchema,
   })
   .strict();
 
 type Input = z.infer<typeof InputSchema>;
 
+/**
+ * 継承ツリーをインデント付き Markdown リストに変換する。
+ */
 function treeToMarkdown(node: InheritanceNode, indent: number = 0): string[] {
   const lines: string[] = [];
   const prefix = "  ".repeat(indent);
@@ -84,15 +85,11 @@ Examples:
       const entity = getEntity(params.name);
 
       if (!entity) {
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: `Error: Entity '${params.name}' not found in IFC4.3 schema. Use ifc_search_entity to find available entities.`,
-            },
-          ],
-          isError: true,
-        };
+        return createNotFoundError(
+          "Entity",
+          params.name,
+          "Use ifc_search_entity to find available entities.",
+        );
       }
 
       const showAncestors = params.direction === "ancestors" || params.direction === "both";
@@ -115,29 +112,17 @@ Examples:
 
       // Markdown format
       const lines: string[] = [];
-      lines.push(`# Inheritance: ${entity.name}`);
-      lines.push("");
+      lines.push(`# Inheritance: ${entity.name}`, "");
 
       if (showAncestors && ancestors.length > 1) {
-        lines.push("## Ancestor Chain (→ supertype)");
-        lines.push("");
-        lines.push(`\`${ancestors.join(" → ")}\``);
-        lines.push("");
+        lines.push("## Ancestor Chain (→ supertype)", "", `\`${ancestors.join(" → ")}\``, "");
       }
 
       if (tree) {
-        lines.push("## Descendant Tree (subtypes)");
-        lines.push("");
-        lines.push(...treeToMarkdown(tree));
-        lines.push("");
+        lines.push("## Descendant Tree (subtypes)", "", ...treeToMarkdown(tree), "");
       }
 
-      let text = lines.join("\n");
-      if (text.length > CHARACTER_LIMIT) {
-        text = text.slice(0, CHARACTER_LIMIT) + "\n\n...[truncated]";
-      }
-
-      return { content: [{ type: "text" as const, text }] };
+      return createTextResponse(lines.join("\n"));
     },
   );
 }

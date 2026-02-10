@@ -2,6 +2,7 @@
  * IFC Schema Data Loader
  *
  * JSON ファイルを読み込み、高速検索用のインデックスを構築する。
+ * すべての検索・取得操作を提供するサービス。
  */
 
 import { readFileSync } from "node:fs";
@@ -18,12 +19,19 @@ import type {
   DescriptionEntry,
   DescriptionFullEntry,
 } from "../types.js";
+import {
+  SERVER_NAME,
+  DATA_DIR_RELATIVE,
+  SCHEMA_FILE,
+  DESC_INDEX_FILE,
+  DESC_FULL_FILE,
+} from "../constants.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// データディレクトリのパス (dist/services/ → data/generated/)
-const DATA_DIR = resolve(__dirname, "../../data/generated");
+/** データディレクトリの絶対パス */
+const DATA_DIR = resolve(__dirname, DATA_DIR_RELATIVE);
 
 // ── シングルトンデータストア ──────────────────────────
 
@@ -31,7 +39,7 @@ let schemaData: IfcSchemaData | null = null;
 let descIndex: DescriptionIndex | null = null;
 let descFull: DescriptionFullData | null = null;
 
-// ── 検索インデックス ──────────────────────────────────
+// ── 検索インデックス（Map ベースで O(1) ルックアップ）──
 
 const entityMap = new Map<string, IfcEntity>();
 const entityMapLower = new Map<string, IfcEntity>();
@@ -39,7 +47,13 @@ const typeDeclarationMap = new Map<string, IfcTypeDeclaration>();
 const enumerationMap = new Map<string, IfcEnumeration>();
 const selectTypeMap = new Map<string, IfcSelectType>();
 
-// ── 初期化 ────────────────────────────────────────────
+/**
+ * PropertySet の配列キャッシュ。
+ * searchPropertySets() で毎回 Object.values() するのを避ける。
+ */
+let propertySetArray: DescriptionEntry[] | null = null;
+
+// ── ファイル読み込み ────────────────────────────────
 
 function loadJsonFile<T>(filename: string): T {
   const filepath = resolve(DATA_DIR, filename);
@@ -47,16 +61,18 @@ function loadJsonFile<T>(filename: string): T {
   return JSON.parse(raw) as T;
 }
 
+// ── 初期化 ────────────────────────────────────────────
+
 export function initialize(): void {
-  if (schemaData) return; // already initialized
+  if (schemaData) return; // 二重初期化防止
 
-  console.error("[ifc-core-mcp] Loading schema data...");
+  console.error(`[${SERVER_NAME}] Loading schema data...`);
 
-  schemaData = loadJsonFile<IfcSchemaData>("ifc4x3-schema.json");
-  descIndex = loadJsonFile<DescriptionIndex>("ifc4x3-descriptions-index.json");
-  descFull = loadJsonFile<DescriptionFullData>("ifc4x3-descriptions-full.json");
+  schemaData = loadJsonFile<IfcSchemaData>(SCHEMA_FILE);
+  descIndex = loadJsonFile<DescriptionIndex>(DESC_INDEX_FILE);
+  descFull = loadJsonFile<DescriptionFullData>(DESC_FULL_FILE);
 
-  // エンティティの名前インデックスを構築
+  // エンティティのインデックスを構築
   for (const entity of schemaData.entities) {
     entityMap.set(entity.name, entity);
     entityMapLower.set(entity.name.toLowerCase(), entity);
@@ -74,8 +90,11 @@ export function initialize(): void {
     selectTypeMap.set(st.name, st);
   }
 
+  // PropertySet 配列をキャッシュ
+  propertySetArray = Object.values(descIndex.index.propertySets);
+
   console.error(
-    `[ifc-core-mcp] Loaded: ${entityMap.size} entities, ` +
+    `[${SERVER_NAME}] Loaded: ${entityMap.size} entities, ` +
       `${typeDeclarationMap.size} types, ${enumerationMap.size} enums, ` +
       `${selectTypeMap.size} selects`,
   );
@@ -83,10 +102,17 @@ export function initialize(): void {
 
 // ── エンティティ検索 ──────────────────────────────────
 
+/**
+ * エンティティを名前で取得する（大文字小文字区別なし）。
+ */
 export function getEntity(name: string): IfcEntity | undefined {
   return entityMap.get(name) ?? entityMapLower.get(name.toLowerCase());
 }
 
+/**
+ * キーワードでエンティティを検索する。
+ * 名前と説明文の両方を対象にする。
+ */
 export function searchEntities(
   query: string,
   limit: number = 20,
@@ -99,10 +125,8 @@ export function searchEntities(
   const q = query.toLowerCase();
 
   const matched = schemaData!.entities.filter((e) => {
-    // 名前の部分一致
     if (e.name.toLowerCase().includes(q)) return true;
 
-    // 説明文の部分一致
     const desc = descIndex?.index.entities[e.name];
     if (desc?.shortDefinition.toLowerCase().includes(q)) return true;
 
@@ -112,11 +136,7 @@ export function searchEntities(
   const total = matched.length;
   const results = matched.slice(offset, offset + limit);
 
-  return {
-    results,
-    total,
-    hasMore: total > offset + limit,
-  };
+  return { results, total, hasMore: total > offset + limit };
 }
 
 // ── 型検索 ────────────────────────────────────────────
@@ -155,6 +175,12 @@ export function getPropertySetDescription(name: string): DescriptionFullEntry | 
   return descFull?.data.propertySets[name];
 }
 
+// ── PropertySet 検索 ────────────────────────────────
+
+/**
+ * キーワードで PropertySet を検索する。
+ * キャッシュ済み配列を使い Object.values() の繰り返し呼び出しを回避。
+ */
 export function searchPropertySets(
   query: string,
   limit: number = 20,
@@ -164,12 +190,11 @@ export function searchPropertySets(
   total: number;
   hasMore: boolean;
 } {
-  if (!descIndex) return { results: [], total: 0, hasMore: false };
+  if (!propertySetArray) return { results: [], total: 0, hasMore: false };
 
   const q = query.toLowerCase();
-  const all = Object.values(descIndex.index.propertySets);
 
-  const matched = all.filter((ps) => {
+  const matched = propertySetArray.filter((ps) => {
     if (ps.name.toLowerCase().includes(q)) return true;
     if (ps.shortDefinition.toLowerCase().includes(q)) return true;
     return false;
@@ -189,6 +214,9 @@ export interface InheritanceNode {
   children: InheritanceNode[];
 }
 
+/**
+ * 指定エンティティから下方向の継承ツリーを構築する。
+ */
 export function getInheritanceTree(name: string, depth: number = 5): InheritanceNode | undefined {
   const entity = getEntity(name);
   if (!entity) return undefined;
@@ -210,6 +238,9 @@ export function getInheritanceTree(name: string, depth: number = 5): Inheritance
   return buildTree(name, 0);
 }
 
+/**
+ * 指定エンティティから上方向の祖先チェーンを取得する。
+ */
 export function getAncestorChain(name: string): string[] {
   const entity = getEntity(name);
   if (!entity) return [];

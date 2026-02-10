@@ -4,13 +4,20 @@
 
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { ResponseFormat, type DirectAttribute, type TypeRef } from "../types.js";
-import { CHARACTER_LIMIT } from "../constants.js";
+import { ResponseFormat, type DirectAttribute } from "../types.js";
+import { ENTITY_DOC_SECTIONS } from "../constants.js";
 import {
   getEntity,
   getEntityDescription,
   getEntityFullDescription,
 } from "../services/schema-loader.js";
+import { responseFormatSchema } from "../utils/zod-schemas.js";
+import {
+  createTextResponse,
+  createJsonResponse,
+  createNotFoundError,
+} from "../utils/response-helper.js";
+import { formatAttribute } from "../utils/format-helper.js";
 
 const InputSchema = z
   .object({
@@ -30,35 +37,66 @@ const InputSchema = z
       .boolean()
       .default(true)
       .describe("Include Markdown description text (default: true)"),
-    response_format: z
-      .nativeEnum(ResponseFormat)
-      .default(ResponseFormat.MARKDOWN)
-      .describe("Output format: 'markdown' or 'json'"),
+    response_format: responseFormatSchema,
   })
   .strict();
 
 type Input = z.infer<typeof InputSchema>;
 
-function typeRefToString(typeRef: TypeRef): string {
-  switch (typeRef.kind) {
-    case "entity":
-    case "type":
-    case "enum":
-    case "select":
-    case "named":
-      return typeRef.name;
-    case "simple":
-      return typeRef.name.toUpperCase();
-    case "aggregation":
-      return `${typeRef.aggregationType.toUpperCase()} [${typeRef.bound1}:${typeRef.bound2 ?? "?"}] OF ${typeRefToString(typeRef.elementType)}`;
-    case "unknown":
-      return typeRef.raw;
+// ── Markdown 組み立て用ヘルパー ─────────────────────
+
+/**
+ * エンティティのメタ情報セクションを組み立てる。
+ */
+function buildMetaSection(
+  entity: { name: string; supertype: string | null; ancestors: string[]; subtypes: string[] },
+  desc?: { layer: string; schema: string },
+): string[] {
+  const lines: string[] = [];
+  if (desc) {
+    lines.push(`- **Layer**: ${desc.layer} / ${desc.schema}`);
   }
+  if (entity.supertype) {
+    lines.push(`- **Supertype**: ${entity.supertype}`);
+  }
+  if (entity.ancestors.length > 0) {
+    lines.push(`- **Inheritance**: ${entity.name} → ${entity.ancestors.join(" → ")}`);
+  }
+  if (entity.subtypes.length > 0) {
+    lines.push(`- **Subtypes**: ${entity.subtypes.join(", ")}`);
+  }
+  return lines;
 }
 
-function formatAttribute(attr: DirectAttribute): string {
-  const opt = attr.optional ? "OPTIONAL " : "";
-  return `${attr.name} : ${opt}${typeRefToString(attr.type)}`;
+/**
+ * 直接属性セクションを組み立てる。
+ */
+function buildDirectAttributesSection(attrs: DirectAttribute[]): string[] {
+  const lines = ["## Direct Attributes", ""];
+  if (attrs.length === 0) {
+    lines.push("_(no direct attributes)_");
+  } else {
+    for (const attr of attrs) {
+      lines.push(`- \`${formatAttribute(attr)}\``);
+    }
+  }
+  return lines;
+}
+
+/**
+ * 全属性（継承含む）セクションを組み立てる。
+ * directNames を Set で受け取り O(1) ルックアップにする。
+ */
+function buildAllAttributesSection(
+  allAttrs: DirectAttribute[],
+  directNames: Set<string>,
+): string[] {
+  const lines = ["## All Attributes (including inherited)", ""];
+  for (const attr of allAttrs) {
+    const marker = directNames.has(attr.name) ? "" : " _(inherited)_";
+    lines.push(`- \`${formatAttribute(attr)}\`${marker}`);
+  }
+  return lines;
 }
 
 export function registerGetEntity(server: McpServer): void {
@@ -95,15 +133,11 @@ Examples:
       const entity = getEntity(params.name);
 
       if (!entity) {
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: `Error: Entity '${params.name}' not found in IFC4.3 schema. Use ifc_search_entity to find available entities.`,
-            },
-          ],
-          isError: true,
-        };
+        return createNotFoundError(
+          "Entity",
+          params.name,
+          "Use ifc_search_entity to find available entities.",
+        );
       }
 
       const desc = getEntityDescription(entity.name);
@@ -111,6 +145,7 @@ Examples:
         ? getEntityFullDescription(entity.name)
         : undefined;
 
+      // ── JSON format ──
       if (params.response_format === ResponseFormat.JSON) {
         const output: Record<string, unknown> = {
           name: entity.name,
@@ -133,72 +168,37 @@ Examples:
         if (fullDesc) {
           output.description = fullDesc.fullText;
         }
-
-        let text = JSON.stringify(output, null, 2);
-        if (text.length > CHARACTER_LIMIT) {
-          text = text.slice(0, CHARACTER_LIMIT) + "\n...[truncated]";
-        }
-        return { content: [{ type: "text" as const, text }] };
+        return createJsonResponse(output);
       }
 
-      // Markdown format
+      // ── Markdown format ──
       const lines: string[] = [];
       const abstractTag = entity.isAbstract ? " _(ABSTRACT)_" : "";
-      lines.push(`# ${entity.name}${abstractTag}`);
-      lines.push("");
+      lines.push(`# ${entity.name}${abstractTag}`, "");
 
       // 説明文
       if (desc?.shortDefinition) {
-        lines.push(desc.shortDefinition);
-        lines.push("");
+        lines.push(desc.shortDefinition, "");
       }
 
       // メタ情報
-      if (desc) {
-        lines.push(`- **Layer**: ${desc.layer} / ${desc.schema}`);
-      }
-      if (entity.supertype) {
-        lines.push(`- **Supertype**: ${entity.supertype}`);
-      }
-      if (entity.ancestors.length > 0) {
-        lines.push(`- **Inheritance**: ${entity.name} → ${entity.ancestors.join(" → ")}`);
-      }
-      if (entity.subtypes.length > 0) {
-        lines.push(`- **Subtypes**: ${entity.subtypes.join(", ")}`);
-      }
-      lines.push("");
+      lines.push(...buildMetaSection(entity, desc), "");
 
       // Direct attributes
-      lines.push("## Direct Attributes");
-      lines.push("");
-      if (entity.directAttributes.length === 0) {
-        lines.push("_(no direct attributes)_");
-      } else {
-        for (const attr of entity.directAttributes) {
-          lines.push(`- \`${formatAttribute(attr)}\``);
-        }
-      }
-      lines.push("");
+      lines.push(...buildDirectAttributesSection(entity.directAttributes), "");
 
-      // Inherited attributes
+      // Inherited attributes（直接属性との差分がある場合のみ表示）
       if (
         params.include_inherited &&
         entity.allAttributes.length > entity.directAttributes.length
       ) {
-        lines.push("## All Attributes (including inherited)");
-        lines.push("");
-        for (const attr of entity.allAttributes) {
-          const isDirect = entity.directAttributes.some((d) => d.name === attr.name);
-          const marker = isDirect ? "" : " _(inherited)_";
-          lines.push(`- \`${formatAttribute(attr)}\`${marker}`);
-        }
-        lines.push("");
+        const directNames = new Set(entity.directAttributes.map((d) => d.name));
+        lines.push(...buildAllAttributesSection(entity.allAttributes, directNames), "");
       }
 
       // Inverse attributes
       if (params.include_inverse && entity.inverseAttributes.length > 0) {
-        lines.push("## Inverse Attributes");
-        lines.push("");
+        lines.push("## Inverse Attributes", "");
         for (const inv of entity.inverseAttributes) {
           const bound = inv.bound2 ? `[${inv.bound1}:${inv.bound2}]` : `[${inv.bound1}:?]`;
           lines.push(
@@ -210,46 +210,31 @@ Examples:
 
       // WHERE rules
       if (entity.whereRules.length > 0) {
-        lines.push("## WHERE Rules");
-        lines.push("");
+        lines.push("## WHERE Rules", "");
         for (const rule of entity.whereRules) {
-          lines.push(`### ${rule.name}`);
-          lines.push(`\`\`\`express`);
-          lines.push(rule.expression);
-          lines.push(`\`\`\``);
-          lines.push("");
+          lines.push(`### ${rule.name}`, "```express", rule.expression, "```", "");
         }
       }
 
-      // 詳細説明文
+      // 詳細説明文（定数から取得するセクション名）
       if (fullDesc?.sections) {
-        const sectionsToShow = ["Attributes", "Formal Propositions", "Concepts"];
-        for (const section of sectionsToShow) {
+        for (const section of ENTITY_DOC_SECTIONS) {
           if (fullDesc.sections[section]) {
-            lines.push(`## ${section} (from documentation)`);
-            lines.push("");
-            lines.push(fullDesc.sections[section]);
-            lines.push("");
+            lines.push(`## ${section} (from documentation)`, "", fullDesc.sections[section], "");
           }
         }
       }
 
       // History
       if (desc?.history && desc.history.length > 0) {
-        lines.push("## History");
-        lines.push("");
+        lines.push("## History", "");
         for (const h of desc.history) {
           lines.push(`- ${h}`);
         }
         lines.push("");
       }
 
-      let text = lines.join("\n");
-      if (text.length > CHARACTER_LIMIT) {
-        text = text.slice(0, CHARACTER_LIMIT) + "\n\n...[truncated]";
-      }
-
-      return { content: [{ type: "text" as const, text }] };
+      return createTextResponse(lines.join("\n"));
     },
   );
 }

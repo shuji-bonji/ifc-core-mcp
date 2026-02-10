@@ -5,8 +5,14 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { ResponseFormat } from "../types.js";
-import { CHARACTER_LIMIT, DEFAULT_LIMIT, MAX_LIMIT } from "../constants.js";
 import { getPropertySetDescription, searchPropertySets } from "../services/schema-loader.js";
+import { responseFormatSchema, limitSchema, offsetSchema } from "../utils/zod-schemas.js";
+import {
+  createTextResponse,
+  createJsonResponse,
+  createNotFoundError,
+} from "../utils/response-helper.js";
+import { buildPaginationMeta } from "../utils/format-helper.js";
 
 const InputSchema = z
   .object({
@@ -20,22 +26,102 @@ const InputSchema = z
       .enum(["get", "search"])
       .default("get")
       .describe("Mode: 'get' for exact name lookup, 'search' for keyword search"),
-    limit: z
-      .number()
-      .int()
-      .min(1)
-      .max(MAX_LIMIT)
-      .default(DEFAULT_LIMIT)
-      .describe("Max results for search mode"),
-    offset: z.number().int().min(0).default(0).describe("Pagination offset for search mode"),
-    response_format: z
-      .nativeEnum(ResponseFormat)
-      .default(ResponseFormat.MARKDOWN)
-      .describe("Output format: 'markdown' or 'json'"),
+    limit: limitSchema,
+    offset: offsetSchema,
+    response_format: responseFormatSchema,
   })
   .strict();
 
 type Input = z.infer<typeof InputSchema>;
+
+// ── get モード: 単一 PropertySet の取得 ─────────────
+
+function handleGetMode(params: Input) {
+  const pset = getPropertySetDescription(params.name);
+
+  if (!pset) {
+    return createNotFoundError(
+      "PropertySet",
+      params.name,
+      'Use mode="search" with a keyword to find available PropertySets.',
+    );
+  }
+
+  if (params.response_format === ResponseFormat.JSON) {
+    return createJsonResponse({
+      name: pset.name,
+      layer: pset.layer,
+      schema: pset.schema,
+      shortDefinition: pset.shortDefinition,
+      history: pset.history,
+      sections: pset.sections,
+    });
+  }
+
+  // Markdown
+  const lines: string[] = [];
+  lines.push(`# ${pset.name}`, "");
+  if (pset.shortDefinition) {
+    lines.push(pset.shortDefinition, "");
+  }
+  lines.push(`- **Layer**: ${pset.layer} / ${pset.schema}`, "");
+
+  // fullText にはタイトル行が含まれるので除去して本文のみ追加
+  if (pset.fullText) {
+    const bodyStart = pset.fullText.indexOf("\n");
+    if (bodyStart !== -1) {
+      lines.push(pset.fullText.substring(bodyStart + 1).trim());
+    }
+  }
+
+  return createTextResponse(lines.join("\n"));
+}
+
+// ── search モード: キーワード検索 ───────────────────
+
+function handleSearchMode(params: Input) {
+  const { results, total, hasMore } = searchPropertySets(params.name, params.limit, params.offset);
+
+  if (results.length === 0) {
+    return createTextResponse(`No PropertySets found matching '${params.name}'.`);
+  }
+
+  const propertySets = results.map((ps) => ({
+    name: ps.name,
+    layer: ps.layer,
+    schema: ps.schema,
+    shortDefinition: ps.shortDefinition,
+  }));
+
+  if (params.response_format === ResponseFormat.JSON) {
+    return createJsonResponse({
+      ...buildPaginationMeta(total, results.length, params.offset, hasMore),
+      propertySets,
+    });
+  }
+
+  // Markdown
+  const lines: string[] = [];
+  lines.push(`# PropertySet Search: "${params.name}"`, "");
+  lines.push(`Found **${total}** PropertySets (showing ${results.length})`, "");
+
+  for (const ps of propertySets) {
+    lines.push(`## ${ps.name}`);
+    lines.push(`- **Layer**: ${ps.layer} / ${ps.schema}`);
+    if (ps.shortDefinition) lines.push(`- ${ps.shortDefinition}`);
+    lines.push("");
+  }
+
+  if (hasMore) {
+    lines.push(
+      `_More results available. Use offset=${params.offset + results.length} to see next page._`,
+    );
+  }
+
+  return createTextResponse(lines.join("\n"));
+}
+
+// ── ツール登録 ──────────────────────────────────────
 
 export function registerGetPropertySet(server: McpServer): void {
   server.registerTool(
@@ -71,123 +157,9 @@ Examples:
     },
     async (params: Input) => {
       if (params.mode === "get") {
-        const pset = getPropertySetDescription(params.name);
-
-        if (!pset) {
-          return {
-            content: [
-              {
-                type: "text" as const,
-                text: `Error: PropertySet '${params.name}' not found. Use mode="search" with a keyword to find available PropertySets.`,
-              },
-            ],
-            isError: true,
-          };
-        }
-
-        if (params.response_format === ResponseFormat.JSON) {
-          const output = {
-            name: pset.name,
-            layer: pset.layer,
-            schema: pset.schema,
-            shortDefinition: pset.shortDefinition,
-            history: pset.history,
-            sections: pset.sections,
-          };
-          const text = JSON.stringify(output, null, 2);
-          return { content: [{ type: "text" as const, text }] };
-        }
-
-        // Markdown
-        const lines: string[] = [];
-        lines.push(`# ${pset.name}`);
-        lines.push("");
-        if (pset.shortDefinition) {
-          lines.push(pset.shortDefinition);
-          lines.push("");
-        }
-        lines.push(`- **Layer**: ${pset.layer} / ${pset.schema}`);
-        lines.push("");
-
-        // fullText contains the complete Markdown documentation
-        if (pset.fullText) {
-          // Remove the title line (already shown) and add the rest
-          const bodyStart = pset.fullText.indexOf("\n");
-          if (bodyStart !== -1) {
-            lines.push(pset.fullText.substring(bodyStart + 1).trim());
-          }
-        }
-
-        let text = lines.join("\n");
-        if (text.length > CHARACTER_LIMIT) {
-          text = text.slice(0, CHARACTER_LIMIT) + "\n\n...[truncated]";
-        }
-
-        return { content: [{ type: "text" as const, text }] };
+        return handleGetMode(params);
       }
-
-      // Search mode
-      const { results, total, hasMore } = searchPropertySets(
-        params.name,
-        params.limit,
-        params.offset,
-      );
-
-      if (results.length === 0) {
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: `No PropertySets found matching '${params.name}'.`,
-            },
-          ],
-        };
-      }
-
-      if (params.response_format === ResponseFormat.JSON) {
-        const output = {
-          total,
-          count: results.length,
-          offset: params.offset,
-          hasMore,
-          ...(hasMore ? { nextOffset: params.offset + results.length } : {}),
-          propertySets: results.map((ps) => ({
-            name: ps.name,
-            layer: ps.layer,
-            schema: ps.schema,
-            shortDefinition: ps.shortDefinition,
-          })),
-        };
-        const text = JSON.stringify(output, null, 2);
-        return { content: [{ type: "text" as const, text }] };
-      }
-
-      // Markdown
-      const lines: string[] = [];
-      lines.push(`# PropertySet Search: "${params.name}"`);
-      lines.push("");
-      lines.push(`Found **${total}** PropertySets (showing ${results.length})`);
-      lines.push("");
-
-      for (const ps of results) {
-        lines.push(`## ${ps.name}`);
-        lines.push(`- **Layer**: ${ps.layer} / ${ps.schema}`);
-        if (ps.shortDefinition) lines.push(`- ${ps.shortDefinition}`);
-        lines.push("");
-      }
-
-      if (hasMore) {
-        lines.push(
-          `_More results available. Use offset=${params.offset + results.length} to see next page._`,
-        );
-      }
-
-      let text = lines.join("\n");
-      if (text.length > CHARACTER_LIMIT) {
-        text = text.slice(0, CHARACTER_LIMIT) + "\n\n...[truncated]";
-      }
-
-      return { content: [{ type: "text" as const, text }] };
+      return handleSearchMode(params);
     },
   );
 }

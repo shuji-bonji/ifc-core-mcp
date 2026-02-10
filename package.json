@@ -4,9 +4,15 @@
   "description": "MCP server for IFC4.3 specification reference - search and retrieve IFC entity definitions, attributes, inheritance, and PropertySets",
   "type": "module",
   "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "bin": {
     "ifc-core-mcp": "dist/index.js"
   },
+  "files": [
+    "dist",
+    "data/generated",
+    "README.md"
+  ],
   "scripts": {
     "start": "node dist/index.js",
     "dev": "tsx watch src/index.ts",
@@ -21,7 +27,8 @@
     "test:coverage": "vitest run --coverage",
     "test:e2e": "vitest run tests/e2e/",
     "test:unit": "vitest run tests/unit/",
-    "prepare-data": "python3 scripts/convert_express_to_json.py && python3 scripts/build_markdown_index.py"
+    "prepare-data": "python3 scripts/convert_express_to_json.py && python3 scripts/build_markdown_index.py",
+    "prepublishOnly": "npm run build"
   },
   "engines": {
     "node": ">=18"

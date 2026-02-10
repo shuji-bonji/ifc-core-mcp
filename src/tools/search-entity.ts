@@ -5,8 +5,10 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { ResponseFormat } from "../types.js";
-import { DEFAULT_LIMIT, MAX_LIMIT, CHARACTER_LIMIT } from "../constants.js";
 import { searchEntities, getEntityDescription } from "../services/schema-loader.js";
+import { responseFormatSchema, limitSchema, offsetSchema } from "../utils/zod-schemas.js";
+import { createTextResponse, createJsonResponse } from "../utils/response-helper.js";
+import { buildPaginationMeta } from "../utils/format-helper.js";
 
 const InputSchema = z
   .object({
@@ -17,22 +19,21 @@ const InputSchema = z
       .describe(
         "Search keyword to match against entity names or descriptions (e.g. 'Wall', 'beam', 'spatial')",
       ),
-    limit: z
-      .number()
-      .int()
-      .min(1)
-      .max(MAX_LIMIT)
-      .default(DEFAULT_LIMIT)
-      .describe("Maximum results to return"),
-    offset: z.number().int().min(0).default(0).describe("Number of results to skip for pagination"),
-    response_format: z
-      .nativeEnum(ResponseFormat)
-      .default(ResponseFormat.MARKDOWN)
-      .describe("Output format: 'markdown' for human-readable or 'json' for structured data"),
+    limit: limitSchema,
+    offset: offsetSchema,
+    response_format: responseFormatSchema,
   })
   .strict();
 
 type Input = z.infer<typeof InputSchema>;
+
+/** ツール共通のアノテーション（読み取り専用・冪等） */
+const TOOL_ANNOTATIONS = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: false,
+} as const;
 
 export function registerSearchEntity(server: McpServer): void {
   server.registerTool(
@@ -58,79 +59,58 @@ Examples:
   - "spatial" → IfcSpatialElement, IfcSpatialStructureElement, ...
   - "beam" → IfcBeam, IfcBeamType, IfcBeamStandardCase, ...`,
       inputSchema: InputSchema,
-      annotations: {
-        readOnlyHint: true,
-        destructiveHint: false,
-        idempotentHint: true,
-        openWorldHint: false,
-      },
+      annotations: TOOL_ANNOTATIONS,
     },
     async (params: Input) => {
       const { results, total, hasMore } = searchEntities(params.query, params.limit, params.offset);
 
       if (results.length === 0) {
+        return createTextResponse(`No IFC entities found matching '${params.query}'.`);
+      }
+
+      const entities = results.map((e) => {
+        const desc = getEntityDescription(e.name);
         return {
-          content: [
-            {
-              type: "text" as const,
-              text: `No IFC entities found matching '${params.query}'.`,
-            },
-          ],
+          name: e.name,
+          isAbstract: e.isAbstract,
+          supertype: e.supertype,
+          layer: desc?.layer ?? "unknown",
+          schema: desc?.schema ?? "unknown",
+          shortDefinition: desc?.shortDefinition ?? "",
         };
+      });
+
+      if (params.response_format === ResponseFormat.JSON) {
+        return createJsonResponse({
+          ...buildPaginationMeta(total, results.length, params.offset, hasMore),
+          entities,
+        });
       }
 
-      const output = {
-        total,
-        count: results.length,
-        offset: params.offset,
-        hasMore,
-        ...(hasMore ? { nextOffset: params.offset + results.length } : {}),
-        entities: results.map((e) => {
-          const desc = getEntityDescription(e.name);
-          return {
-            name: e.name,
-            isAbstract: e.isAbstract,
-            supertype: e.supertype,
-            layer: desc?.layer ?? "unknown",
-            schema: desc?.schema ?? "unknown",
-            shortDefinition: desc?.shortDefinition ?? "",
-          };
-        }),
-      };
+      // Markdown format
+      const lines = [
+        `# IFC Entity Search: "${params.query}"`,
+        "",
+        `Found **${total}** entities (showing ${results.length}, offset ${params.offset})`,
+        "",
+      ];
 
-      let text: string;
-      if (params.response_format === ResponseFormat.MARKDOWN) {
-        const lines = [
-          `# IFC Entity Search: "${params.query}"`,
-          "",
-          `Found **${total}** entities (showing ${results.length}, offset ${params.offset})`,
-          "",
-        ];
-        for (const e of output.entities) {
-          const abstractTag = e.isAbstract ? " _(abstract)_" : "";
-          lines.push(`## ${e.name}${abstractTag}`);
-          lines.push(`- **Layer**: ${e.layer} / ${e.schema}`);
-          if (e.supertype) lines.push(`- **Supertype**: ${e.supertype}`);
-          if (e.shortDefinition) lines.push(`- ${e.shortDefinition}`);
-          lines.push("");
-        }
-        if (hasMore) {
-          lines.push(
-            `_More results available. Use offset=${params.offset + results.length} to see next page._`,
-          );
-        }
-        text = lines.join("\n");
-      } else {
-        text = JSON.stringify(output, null, 2);
+      for (const e of entities) {
+        const abstractTag = e.isAbstract ? " _(abstract)_" : "";
+        lines.push(`## ${e.name}${abstractTag}`);
+        lines.push(`- **Layer**: ${e.layer} / ${e.schema}`);
+        if (e.supertype) lines.push(`- **Supertype**: ${e.supertype}`);
+        if (e.shortDefinition) lines.push(`- ${e.shortDefinition}`);
+        lines.push("");
       }
 
-      if (text.length > CHARACTER_LIMIT) {
-        text = text.slice(0, CHARACTER_LIMIT) + "\n\n...[truncated]";
+      if (hasMore) {
+        lines.push(
+          `_More results available. Use offset=${params.offset + results.length} to see next page._`,
+        );
       }
 
-      return {
-        content: [{ type: "text" as const, text }],
-      };
+      return createTextResponse(lines.join("\n"));
     },
   );
 }
