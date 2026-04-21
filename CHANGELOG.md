@@ -7,7 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.1.1] - 2025-02-11
+## [0.2.0] - 2026-04-21
+
+### Added
+
+- **Scope & Non-Scope** section in README (English and Japanese) clarifying that this MCP provides IFC specification reference only, not IFC file parsing/operation
+- **Example Usage** section in README showing how to ask Claude about IFC entities
+- **Running manually** section in README describing how to start the server after `npm install -g`
+- **Roadmap** section in README referencing the sister project concept for IFC file operations
+- GitHub Actions publish workflow now uses **npm Trusted Publisher (OIDC)** with provenance attestation (`--provenance`), eliminating the need for long-lived `NPM_TOKEN`
+- `docs/TRUSTED_PUBLISHER_SETUP.md` — setup guide for configuring Trusted Publisher on npmjs.com
+
+### Changed
+
+- **Minimum Node.js version raised to 22** (`engines.node: ">=22"`). Node 18/20 are no longer supported. Rationale: Node 20 enters Maintenance phase in late April 2026; Node 22 is the current Active LTS
+- CI and Publish workflows now run on Node.js 22 (was 20)
+- `publish.yml`: removed `NODE_AUTH_TOKEN` / `secrets.NPM_TOKEN`, added `id-token: write` permission, enabled `--provenance` flag
+- README.md / README.ja.md restructured for better discoverability
+
+### Fixed
+
+- CHANGELOG.md release dates for v0.1.0 and v0.1.1 corrected to the actual npm publish date (2026-02-10); previous entries (2025-06-14 and 2025-02-11) were documentation errors
+
+## [0.1.1] - 2026-02-10
 
 ### Added
 
@@ -53,7 +75,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Maintainability**: Centralized response creation, error handling, and pagination meta generation
 - **Testability**: Added 39 new unit tests across utilities and schema-loader (total: 102 tests)
 
-## [0.1.0] - 2025-06-14
+## [0.1.0] - 2026-02-10
 
 ### Added
 
@@ -67,6 +89,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Unit tests + E2E integration tests with actual MCP client
 - ESLint + Prettier configuration
 
-[Unreleased]: https://github.com/shuji-bonji/ifc-core-mcp/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/shuji-bonji/ifc-core-mcp/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/shuji-bonji/ifc-core-mcp/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/shuji-bonji/ifc-core-mcp/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/shuji-bonji/ifc-core-mcp/releases/tag/v0.1.0

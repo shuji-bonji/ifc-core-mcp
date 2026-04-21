@@ -29,6 +29,23 @@
 | `ifc_get_inheritance` | 継承ツリー（ancestors / descendants / both）             |
 | `ifc_get_propertyset` | PropertySet 定義の取得・検索                             |
 
+## スコープ
+
+### 本 MCP が提供するもの
+
+- **IFC4.3 仕様リファレンス**: エンティティ定義、属性、継承、WHERE 制約、PropertySet 定義
+- **IFC 標準（ISO 16739-1:2024）の構造化ルックアップ** — AI のための語彙/辞書として機能
+- **デュアル出力**（Markdown / JSON）— 人間可読とプログラム処理の両用途に対応
+
+### 本 MCP が提供しないもの
+
+- **IFC ファイル（.ifc）のパース・抽出** — [IfcOpenShell](https://ifcopenshell.org/)（Python）や [web-ifc](https://github.com/ThatOpen/engine_web-ifc)（TypeScript/WebAssembly）を併用してください
+- **ジオメトリレンダリング・3D 可視化**
+- **スキーマバージョン間マイグレーション**（IFC2x3 / IFC4 → IFC4.3）— 現状 IFC4.3 のみ対応
+- **数量情報（`Qto_*`）** — 将来リリース予定
+
+実際の `.ifc` ファイルをランタイムで操作する必要がある場合は、本 MCP（仕様参照）とファイル操作ライブラリ（データ抽出）を組み合わせてください。
+
 ## インストール
 
 ### npm（グローバル）
@@ -67,6 +84,28 @@ npm install
 npm run build
 node dist/index.js
 ```
+
+### 手動起動（グローバルインストール後）
+
+`npm install -g @shuji-bonji/ifc-core-mcp` でインストール後、以下のコマンドでサーバーを起動できます:
+
+```bash
+ifc-core-mcp
+```
+
+プロセスは stdio（MCP 標準トランスポート）で通信します。対話的な直接実行ではなく、MCP クライアント（Claude Desktop、Claude Code 等）から起動される想定です。
+
+## 使用例
+
+インストール後、MCP 対応 LLM（Claude 等）に次のような質問ができます:
+
+- _「IFC4.3 で `IfcSpace` にはどんな属性がありますか？」_
+- _「`IfcBuildingElement` から末端のサブタイプまでの継承階層を見せて。」_
+- _「HVAC に関連する IFC エンティティをすべて探して。」_
+- _「`IfcWall` に適用される PropertySet とその中のプロパティは？」_
+- _「`IfcMapConversion` の定義と、CRS 情報を格納する属性は？」_
+
+LLM は適切なツール（`ifc_search_entity`、`ifc_get_entity`、`ifc_get_inheritance`、`ifc_get_propertyset`）を自動的に呼び出し、構造化された結果を返します。
 
 ## データカバレッジ
 
@@ -113,7 +152,7 @@ IFC4.3 スキーマの全体をカバーしています:
 
 ### 前提条件
 
-- Node.js >= 18
+- Node.js >= 22
 - Python 3 + [IfcOpenShell](https://ifcopenshell.org/)（データ再生成時のみ）
 
 ### コマンド
@@ -138,10 +177,22 @@ npm run prepare-data   # 生データからデータ再生成（Python 必須）
 - **リンター**: ESLint + Prettier
 - **CI/CD**: GitHub Actions（lint → test → build → publish）
 
+## ロードマップ
+
+本サーバーは IFC4.3 スキーマ自体に焦点を当てています。将来の発展候補:
+
+- **QuantitySet（`Qto_*`）対応** — PropertySet と並ぶ数量定義の追加
+- **ifcJSON スキーマ対応** — 現状の EXPRESS 由来データを補完
+- **バージョン横断ルックアップ** — IFC2x3 / IFC4 → IFC4.3 のエンティティマッピング
+- **IFC ファイル操作用の姉妹 MCP** — 実際の `.ifc` ファイルをパース・クエリする別プロジェクト（計画中、未リリース）。本リファレンスサーバーとの組み合わせで動作する設計
+
+フィードバックやユースケース報告は [GitHub Issues](https://github.com/shuji-bonji/ifc-core-mcp/issues) までお願いします。
+
 ## 関連プロジェクト
 
 - [w3c-mcp](https://github.com/shuji-bonji/w3c-mcp) — W3C/WHATWG/IETF Web 仕様の MCP サーバー
 - [rfcxml-mcp](https://github.com/shuji-bonji/rfcxml-mcp) — IETF RFC ドキュメントの MCP サーバー（XML ベース）
+- [epsg-mcp](https://github.com/shuji-bonji/epsg-mcp) — EPSG 測地系の MCP サーバー（`IfcMapConversion` と組み合わせて活用可能）
 
 ## ライセンス
 
