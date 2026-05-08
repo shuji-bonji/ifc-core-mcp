@@ -1,6 +1,6 @@
 {
   "name": "@shuji-bonji/ifc-core-mcp",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "MCP server for IFC4.3 specification reference - search and retrieve IFC entity definitions, attributes, inheritance, and PropertySets",
   "type": "module",
   "main": "dist/index.js",
@@ -16,7 +16,7 @@
   "scripts": {
     "start": "node dist/index.js",
     "dev": "tsx watch src/index.ts",
-    "build": "tsc",
+    "build": "tsc && chmod +x dist/index.js",
     "clean": "rm -rf dist",
     "lint": "eslint src/ tests/",
     "lint:fix": "eslint src/ tests/ --fix",
