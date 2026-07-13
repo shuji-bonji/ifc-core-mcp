@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-07-14
+
+### Added
+
+- **`.claude-plugin/plugin.json` を追加**: Claude Code plugin として直接インストール可能に。`mcpServers` で `npx -y @shuji-bonji/ifc-core-mcp@latest` を起動する定義を含む。
+- npm パッケージの `files` に `.claude-plugin` を追加し、公開物に plugin manifest を同梱。
+
 ## [0.2.1] - 2026-05-09
 
 ### Build

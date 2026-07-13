@@ -1,0 +1,31 @@
+{
+  "$schema": "https://raw.githubusercontent.com/anthropics/claude-code/main/.claude-plugin/plugin.schema.json",
+  "name": "ifc-core-mcp",
+  "version": "0.2.2",
+  "description": "IFC4.3 (BIM) 仕様参照 MCP server。IFC エンティティ定義・属性・継承階層・PropertySet の検索取得を提供。",
+  "author": {
+    "name": "shuji-bonji",
+    "email": "bonji@mikuro.jp",
+    "url": "https://github.com/shuji-bonji"
+  },
+  "homepage": "https://github.com/shuji-bonji/ifc-core-mcp",
+  "repository": "https://github.com/shuji-bonji/ifc-core-mcp",
+  "license": "MIT",
+  "keywords": [
+    "ifc",
+    "bim",
+    "ifc4x3",
+    "buildingsmart",
+    "mcp",
+    "mcp-server"
+  ],
+  "mcpServers": {
+    "ifc-core": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@shuji-bonji/ifc-core-mcp@latest"
+      ]
+    }
+  }
+}
