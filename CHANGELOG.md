@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-07
+
+### Changed
+
+- **MCP SDK v2 へ移行**: `@modelcontextprotocol/sdk` 1.x から `@modelcontextprotocol/server` / `@modelcontextprotocol/client` 2.0 へ。起動を `serveStdio(createServer)` に変更し、2025 系（`initialize`）と 2026-07-28（`server/discover`）の両プロトコル版を受け付けるようにした。`initialize` / `server/discover` の応答に `instructions`（仕様リファレンスであり IFC ファイルは読まない旨）を追加。
+- **`src/server.ts` を新設**: `createServer()` にサーバー生成とツール登録を集約し、`index.ts` は stdio 起動のみを担当。
+- **Zod 4 へ更新** (`^4.5.4`): `z.nativeEnum` → `z.enum`、`z.object().strict()` → `z.strictObject()`。
+- **TypeScript 7 へ更新** (`^7.0.2`): tsconfig を `module: nodenext` に変更し、`types: ["node"]` を明示（TS 7 では `types` の既定値が `[]` のため）。
+- **ESLint + Prettier を Biome に置き換え**: `@eslint/js` / `eslint` / `typescript-eslint` / `eslint-config-prettier` / `prettier` を削除し `@biomejs/biome` を追加。`biome.json` は epsg-mcp と同じ設定（タブ、シングルクォート、`lineWidth: 100`）。`npm run check` で lint・フォーマット・import 順をまとめて検査。
+- **vitest 5 / `@types/node` 24 へ更新**。`engines.node` を `>=22.12` に（vitest 5 の要件に合わせた）。
+- **CI を Node 22 / 24 のマトリクスに変更**。lint ジョブは `npm run check` を実行。
+
+### Fixed
+
+- `serverInfo.version` が `0.1.1` 固定で `package.json` とずれていた問題を修正。`SERVER_VERSION` を `package.json` から読み込むようにした。
+
 ## [0.2.2] - 2026-07-14
 
 ### Added
@@ -102,7 +118,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Unit tests + E2E integration tests with actual MCP client
 - ESLint + Prettier configuration
 
-[Unreleased]: https://github.com/shuji-bonji/ifc-core-mcp/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/shuji-bonji/ifc-core-mcp/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/shuji-bonji/ifc-core-mcp/compare/v0.2.2...v0.3.0
+[0.2.2]: https://github.com/shuji-bonji/ifc-core-mcp/compare/v0.2.1...v0.2.2
+[0.2.1]: https://github.com/shuji-bonji/ifc-core-mcp/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/shuji-bonji/ifc-core-mcp/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/shuji-bonji/ifc-core-mcp/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/shuji-bonji/ifc-core-mcp/releases/tag/v0.1.0

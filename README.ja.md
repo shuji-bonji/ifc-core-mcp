@@ -152,7 +152,7 @@ IFC4.3 スキーマの全体をカバーしています:
 
 ### 前提条件
 
-- Node.js >= 22
+- Node.js >= 22.12（CI では 22 と 24 で検証）
 - Python 3 + [IfcOpenShell](https://ifcopenshell.org/)（データ再生成時のみ）
 
 ### コマンド
@@ -163,18 +163,39 @@ npm run dev            # tsx によるウォッチモード
 npm test               # 全テスト実行（unit + e2e）
 npm run test:unit      # ユニットテストのみ
 npm run test:e2e       # E2E 統合テスト
-npm run lint           # ESLint チェック
-npm run format         # Prettier フォーマット
+npm run lint           # Biome による lint
+npm run format         # Biome によるフォーマット
+npm run check          # Biome の lint + フォーマット + import 順の検査（CI で実行）
 npm run prepare-data   # 生データからデータ再生成（Python 必須）
 ```
 
+### ローカルビルドを Claude Desktop に接続する
+
+公開前に変更を試すには、npm パッケージではなくビルド済みファイルを Claude Desktop から起動します。`claude_desktop_config.json` に、公開版と区別できる名前（例: `ifc-core-dev`）で、clone した場所の絶対パスを指定したエントリを追加してください。
+
+```json
+{
+  "mcpServers": {
+    "ifc-core-dev": {
+      "command": "node",
+      "args": ["/absolute/path/to/ifc-core-mcp/dist/index.js"]
+    }
+  }
+}
+```
+
+注意点:
+
+- `dist/` は自動では更新されません。`src/` を変更したら `npm run build` を実行し、Claude Desktop を再起動してください（`npm run dev` は tsx のウォッチが stdio を使うため、Desktop の起動対象には使えません）。
+- Claude Desktop は GUI から起動されるため、nvm / volta で入れた `node` が PATH で見つからないことがあります。起動に失敗する場合は `"command": "node"` を `which node` の結果（絶対パス）に置き換えてください。
+
 ### 技術スタック
 
-- **ランタイム**: TypeScript (strict), Node.js
-- **MCP SDK**: `@modelcontextprotocol/sdk`
-- **バリデーション**: Zod
+- **ランタイム**: TypeScript 7 (strict), Node.js
+- **MCP SDK**: `@modelcontextprotocol/server` v2（`serveStdio` により 2025 系と 2026-07-28 の両プロトコル版に対応）
+- **バリデーション**: Zod 4
 - **テスト**: Vitest（unit + 実 MCP クライアントによる e2e）
-- **リンター**: ESLint + Prettier
+- **リンター / フォーマッター**: Biome
 - **CI/CD**: GitHub Actions（lint → test → build → publish）
 
 ## ロードマップ

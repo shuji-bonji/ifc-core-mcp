@@ -1,68 +1,67 @@
 {
-  "name": "@shuji-bonji/ifc-core-mcp",
-  "version": "0.2.2",
-  "description": "MCP server for IFC4.3 specification reference - search and retrieve IFC entity definitions, attributes, inheritance, and PropertySets",
-  "type": "module",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
-  "bin": {
-    "ifc-core-mcp": "dist/index.js"
-  },
-  "files": [
-    "dist",
-    "data/generated",
-    ".claude-plugin",
-    "README.md"
-  ],
-  "scripts": {
-    "start": "node dist/index.js",
-    "dev": "tsx watch src/index.ts",
-    "build": "tsc && chmod +x dist/index.js",
-    "clean": "rm -rf dist",
-    "lint": "eslint src/ tests/",
-    "lint:fix": "eslint src/ tests/ --fix",
-    "format": "prettier --write \"src/**/*.ts\" \"tests/**/*.ts\"",
-    "format:check": "prettier --check \"src/**/*.ts\" \"tests/**/*.ts\"",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage",
-    "test:e2e": "vitest run tests/e2e/",
-    "test:unit": "vitest run tests/unit/",
-    "prepare-data": "python3 scripts/convert_express_to_json.py && python3 scripts/build_markdown_index.py && node scripts/build_propertyset_defs.mjs",
-    "prepublishOnly": "npm run build"
-  },
-  "engines": {
-    "node": ">=22"
-  },
-  "keywords": [
-    "mcp",
-    "ifc",
-    "bim",
-    "buildingsmart",
-    "ifc4.3",
-    "specification",
-    "reference"
-  ],
-  "author": "shuji-bonji",
-  "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/shuji-bonji/ifc-core-mcp"
-  },
-  "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.6.1",
-    "zod": "^3.23.8"
-  },
-  "devDependencies": {
-    "@eslint/js": "^9.39.2",
-    "@types/node": "^22.10.0",
-    "@vitest/coverage-v8": "^4.0.18",
-    "eslint": "^9.39.2",
-    "eslint-config-prettier": "^10.1.8",
-    "prettier": "^3.8.1",
-    "tsx": "^4.19.2",
-    "typescript": "^5.7.2",
-    "typescript-eslint": "^8.55.0",
-    "vitest": "^4.0.18"
-  }
+	"name": "@shuji-bonji/ifc-core-mcp",
+	"version": "0.3.0",
+	"description": "MCP server for IFC4.3 specification reference - search and retrieve IFC entity definitions, attributes, inheritance, and PropertySets",
+	"type": "module",
+	"main": "dist/index.js",
+	"types": "dist/index.d.ts",
+	"bin": {
+		"ifc-core-mcp": "dist/index.js"
+	},
+	"files": [
+		"dist",
+		"data/generated",
+		".claude-plugin",
+		"README.md",
+		"README.ja.md"
+	],
+	"scripts": {
+		"start": "node dist/index.js",
+		"dev": "tsx watch src/index.ts",
+		"build": "tsc && chmod +x dist/index.js",
+		"clean": "rm -rf dist",
+		"lint": "biome lint .",
+		"lint:fix": "biome lint --write .",
+		"format": "biome format --write .",
+		"format:check": "biome format .",
+		"test": "vitest run",
+		"test:watch": "vitest",
+		"test:coverage": "vitest run --coverage",
+		"test:e2e": "vitest run tests/e2e/",
+		"test:unit": "vitest run tests/unit/",
+		"prepare-data": "python3 scripts/convert_express_to_json.py && python3 scripts/build_markdown_index.py && node scripts/build_propertyset_defs.mjs",
+		"prepublishOnly": "npm run build",
+		"check": "biome check ."
+	},
+	"engines": {
+		"node": ">=22.12"
+	},
+	"keywords": [
+		"mcp",
+		"ifc",
+		"bim",
+		"buildingsmart",
+		"ifc4.3",
+		"specification",
+		"reference"
+	],
+	"author": "shuji-bonji",
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/shuji-bonji/ifc-core-mcp"
+	},
+	"dependencies": {
+		"@modelcontextprotocol/server": "^2.0.0",
+		"zod": "^4.5.4"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^2.5.12",
+		"@modelcontextprotocol/client": "^2.0.0",
+		"@types/node": "^24.0.0",
+		"@vitest/coverage-v8": "^5.0.0",
+		"tsx": "^4.19.2",
+		"typescript": "^7.0.2",
+		"vitest": "^5.0.0"
+	}
 }

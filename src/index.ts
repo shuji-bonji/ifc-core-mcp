@@ -7,44 +7,35 @@
  * 「判断の根拠」として参照するためのサーバー。
  *
  * Transport: stdio (local integration)
+ * serveStdio は最初のメッセージでプロトコル版（2025 系 / 2026-07-28）を判定し、
+ * createServer() で作った 1 インスタンスを接続の間固定する。
  */
 
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { SERVER_NAME, SERVER_VERSION } from "./constants.js";
-import { initialize } from "./services/schema-loader.js";
-import { registerSearchEntity } from "./tools/search-entity.js";
-import { registerGetEntity } from "./tools/get-entity.js";
-import { registerGetInheritance } from "./tools/get-inheritance.js";
-import { registerGetPropertySet } from "./tools/get-propertyset.js";
+import { serveStdio } from '@modelcontextprotocol/server/stdio';
+import { SERVER_NAME, SERVER_VERSION } from './constants.js';
+import { createServer } from './server.js';
+import { initialize } from './services/schema-loader.js';
 
-// ── MCP Server 初期化 ─────────────────────────────────
+function main(): void {
+	// データロードはプロセスで 1 回だけ
+	initialize();
 
-const server = new McpServer({
-  name: SERVER_NAME,
-  version: SERVER_VERSION,
-});
+	const handle = serveStdio(createServer, {
+		onerror: (error) => console.error(`[${SERVER_NAME}] stdio error:`, error.message),
+	});
 
-// ── データロード ──────────────────────────────────────
+	const shutdown = (): void => {
+		void handle.close().finally(() => process.exit(0));
+	};
+	process.on('SIGINT', shutdown);
+	process.on('SIGTERM', shutdown);
 
-initialize();
-
-// ── ツール登録 ────────────────────────────────────────
-
-registerSearchEntity(server);
-registerGetEntity(server);
-registerGetInheritance(server);
-registerGetPropertySet(server);
-
-// ── サーバー起動 ──────────────────────────────────────
-
-async function main(): Promise<void> {
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
-  console.error(`[${SERVER_NAME}] v${SERVER_VERSION} running via stdio`);
+	console.error(`[${SERVER_NAME}] v${SERVER_VERSION} running via stdio`);
 }
 
-main().catch((error: unknown) => {
-  console.error("Server error:", error);
-  process.exit(1);
-});
+try {
+	main();
+} catch (error: unknown) {
+	console.error('Server error:', error);
+	process.exit(1);
+}

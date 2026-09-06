@@ -5,33 +5,33 @@
  * すべての検索・取得操作を提供するサービス。
  */
 
-import { readFileSync } from "node:fs";
-import { resolve, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
-import type {
-  IfcSchemaData,
-  IfcEntity,
-  IfcTypeDeclaration,
-  IfcEnumeration,
-  IfcSelectType,
-  DescriptionIndex,
-  DescriptionFullData,
-  DescriptionEntry,
-  DescriptionFullEntry,
-  PropertySetDefsData,
-  PropertySetDefinition,
-} from "../types.js";
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
-  SERVER_NAME,
-  DATA_DIR_RELATIVE,
-  SCHEMA_FILE,
-  DESC_INDEX_FILE,
-  DESC_FULL_FILE,
-  PSET_DEFS_FILE,
-  SCHEMA_ID_DEV_PATTERN,
-  SCHEMA_ID_RELEASE,
-} from "../constants.js";
-import { calculateSearchScore } from "../utils/format-helper.js";
+	DATA_DIR_RELATIVE,
+	DESC_FULL_FILE,
+	DESC_INDEX_FILE,
+	PSET_DEFS_FILE,
+	SCHEMA_FILE,
+	SCHEMA_ID_DEV_PATTERN,
+	SCHEMA_ID_RELEASE,
+	SERVER_NAME,
+} from '../constants.js';
+import type {
+	DescriptionEntry,
+	DescriptionFullData,
+	DescriptionFullEntry,
+	DescriptionIndex,
+	IfcEntity,
+	IfcEnumeration,
+	IfcSchemaData,
+	IfcSelectType,
+	IfcTypeDeclaration,
+	PropertySetDefinition,
+	PropertySetDefsData,
+} from '../types.js';
+import { calculateSearchScore } from '../utils/format-helper.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -63,57 +63,57 @@ let propertySetArray: DescriptionEntry[] | null = null;
 // ── ファイル読み込み ────────────────────────────────
 
 function loadJsonFile<T>(filename: string): T {
-  const filepath = resolve(DATA_DIR, filename);
-  const raw = readFileSync(filepath, "utf-8");
-  return JSON.parse(raw) as T;
+	const filepath = resolve(DATA_DIR, filename);
+	const raw = readFileSync(filepath, 'utf-8');
+	return JSON.parse(raw) as T;
 }
 
 // ── 初期化 ────────────────────────────────────────────
 
 export function initialize(): void {
-  if (schemaData) return; // 二重初期化防止
+	if (schemaData) return; // 二重初期化防止
 
-  console.error(`[${SERVER_NAME}] Loading schema data...`);
+	console.error(`[${SERVER_NAME}] Loading schema data...`);
 
-  schemaData = loadJsonFile<IfcSchemaData>(SCHEMA_FILE);
-  descIndex = loadJsonFile<DescriptionIndex>(DESC_INDEX_FILE);
-  descFull = loadJsonFile<DescriptionFullData>(DESC_FULL_FILE);
-  psetDefs = loadJsonFile<PropertySetDefsData>(PSET_DEFS_FILE);
+	schemaData = loadJsonFile<IfcSchemaData>(SCHEMA_FILE);
+	descIndex = loadJsonFile<DescriptionIndex>(DESC_INDEX_FILE);
+	descFull = loadJsonFile<DescriptionFullData>(DESC_FULL_FILE);
+	psetDefs = loadJsonFile<PropertySetDefsData>(PSET_DEFS_FILE);
 
-  // WHERE ルール内の開発版スキーマ ID を正式版に正規化
-  // 例: 'IFC4X3_DEV_923b0514.IFCWALLTYPE' → 'IFC4X3_ADD2.IFCWALLTYPE'
-  for (const entity of schemaData.entities) {
-    for (const rule of entity.whereRules) {
-      rule.expression = rule.expression.replace(SCHEMA_ID_DEV_PATTERN, SCHEMA_ID_RELEASE);
-    }
-  }
+	// WHERE ルール内の開発版スキーマ ID を正式版に正規化
+	// 例: 'IFC4X3_DEV_923b0514.IFCWALLTYPE' → 'IFC4X3_ADD2.IFCWALLTYPE'
+	for (const entity of schemaData.entities) {
+		for (const rule of entity.whereRules) {
+			rule.expression = rule.expression.replace(SCHEMA_ID_DEV_PATTERN, SCHEMA_ID_RELEASE);
+		}
+	}
 
-  // エンティティのインデックスを構築
-  for (const entity of schemaData.entities) {
-    entityMap.set(entity.name, entity);
-    entityMapLower.set(entity.name.toLowerCase(), entity);
-  }
+	// エンティティのインデックスを構築
+	for (const entity of schemaData.entities) {
+		entityMap.set(entity.name, entity);
+		entityMapLower.set(entity.name.toLowerCase(), entity);
+	}
 
-  for (const td of schemaData.typeDeclarations) {
-    typeDeclarationMap.set(td.name, td);
-  }
+	for (const td of schemaData.typeDeclarations) {
+		typeDeclarationMap.set(td.name, td);
+	}
 
-  for (const en of schemaData.enumerations) {
-    enumerationMap.set(en.name, en);
-  }
+	for (const en of schemaData.enumerations) {
+		enumerationMap.set(en.name, en);
+	}
 
-  for (const st of schemaData.selectTypes) {
-    selectTypeMap.set(st.name, st);
-  }
+	for (const st of schemaData.selectTypes) {
+		selectTypeMap.set(st.name, st);
+	}
 
-  // PropertySet 配列をキャッシュ
-  propertySetArray = Object.values(descIndex.index.propertySets);
+	// PropertySet 配列をキャッシュ
+	propertySetArray = Object.values(descIndex.index.propertySets);
 
-  console.error(
-    `[${SERVER_NAME}] Loaded: ${entityMap.size} entities, ` +
-      `${typeDeclarationMap.size} types, ${enumerationMap.size} enums, ` +
-      `${selectTypeMap.size} selects`,
-  );
+	console.error(
+		`[${SERVER_NAME}] Loaded: ${entityMap.size} entities, ` +
+			`${typeDeclarationMap.size} types, ${enumerationMap.size} enums, ` +
+			`${selectTypeMap.size} selects`
+	);
 }
 
 // ── エンティティ検索 ──────────────────────────────────
@@ -122,7 +122,7 @@ export function initialize(): void {
  * エンティティを名前で取得する（大文字小文字区別なし）。
  */
 export function getEntity(name: string): IfcEntity | undefined {
-  return entityMap.get(name) ?? entityMapLower.get(name.toLowerCase());
+	return entityMap.get(name) ?? entityMapLower.get(name.toLowerCase());
 }
 
 /**
@@ -133,74 +133,74 @@ export function getEntity(name: string): IfcEntity | undefined {
  *   名前完全一致 > Ifc+名前完全一致 > 名前前方一致 > 名前部分一致 > 説明文一致
  */
 export function searchEntities(
-  query: string,
-  limit: number = 20,
-  offset: number = 0,
+	query: string,
+	limit: number = 20,
+	offset: number = 0
 ): {
-  results: IfcEntity[];
-  total: number;
-  hasMore: boolean;
+	results: IfcEntity[];
+	total: number;
+	hasMore: boolean;
 } {
-  const scored: { entity: IfcEntity; score: number }[] = [];
+	const scored: { entity: IfcEntity; score: number }[] = [];
 
-  for (const e of schemaData!.entities) {
-    const desc = descIndex?.index.entities[e.name];
-    const score = calculateSearchScore(e.name, desc?.shortDefinition, query);
-    if (score > 0) {
-      scored.push({ entity: e, score });
-    }
-  }
+	for (const e of schemaData!.entities) {
+		const desc = descIndex?.index.entities[e.name];
+		const score = calculateSearchScore(e.name, desc?.shortDefinition, query);
+		if (score > 0) {
+			scored.push({ entity: e, score });
+		}
+	}
 
-  // スコア降順 → 同スコア内は名前昇順
-  scored.sort((a, b) => b.score - a.score || a.entity.name.localeCompare(b.entity.name));
+	// スコア降順 → 同スコア内は名前昇順
+	scored.sort((a, b) => b.score - a.score || a.entity.name.localeCompare(b.entity.name));
 
-  const total = scored.length;
-  const results = scored.slice(offset, offset + limit).map((s) => s.entity);
+	const total = scored.length;
+	const results = scored.slice(offset, offset + limit).map((s) => s.entity);
 
-  return { results, total, hasMore: total > offset + limit };
+	return { results, total, hasMore: total > offset + limit };
 }
 
 // ── 型検索 ────────────────────────────────────────────
 
 export function getTypeDeclaration(name: string): IfcTypeDeclaration | undefined {
-  return typeDeclarationMap.get(name);
+	return typeDeclarationMap.get(name);
 }
 
 export function getEnumeration(name: string): IfcEnumeration | undefined {
-  return enumerationMap.get(name);
+	return enumerationMap.get(name);
 }
 
 export function getSelectType(name: string): IfcSelectType | undefined {
-  return selectTypeMap.get(name);
+	return selectTypeMap.get(name);
 }
 
 // ── 説明文 ────────────────────────────────────────────
 
 export function getEntityDescription(name: string): DescriptionEntry | undefined {
-  return descIndex?.index.entities[name];
+	return descIndex?.index.entities[name];
 }
 
 export function getEntityFullDescription(name: string): DescriptionFullEntry | undefined {
-  return descFull?.data.entities[name];
+	return descFull?.data.entities[name];
 }
 
 export function getTypeDescription(name: string): DescriptionEntry | undefined {
-  return descIndex?.index.types[name];
+	return descIndex?.index.types[name];
 }
 
 export function getTypeFullDescription(name: string): DescriptionFullEntry | undefined {
-  return descFull?.data.types[name];
+	return descFull?.data.types[name];
 }
 
 export function getPropertySetDescription(name: string): DescriptionFullEntry | undefined {
-  return descFull?.data.propertySets[name];
+	return descFull?.data.propertySets[name];
 }
 
 /**
  * PropertySet のプロパティ定義（名前・型・説明）を取得する。
  */
 export function getPropertySetDefinition(name: string): PropertySetDefinition | undefined {
-  return psetDefs?.propertySets[name];
+	return psetDefs?.propertySets[name];
 }
 
 // ── PropertySet 検索 ────────────────────────────────
@@ -211,77 +211,77 @@ export function getPropertySetDefinition(name: string): PropertySetDefinition | 
  * 名前一致を優先するスコアリングでソートする。
  */
 export function searchPropertySets(
-  query: string,
-  limit: number = 20,
-  offset: number = 0,
+	query: string,
+	limit: number = 20,
+	offset: number = 0
 ): {
-  results: DescriptionEntry[];
-  total: number;
-  hasMore: boolean;
+	results: DescriptionEntry[];
+	total: number;
+	hasMore: boolean;
 } {
-  if (!propertySetArray) return { results: [], total: 0, hasMore: false };
+	if (!propertySetArray) return { results: [], total: 0, hasMore: false };
 
-  const scored: { entry: DescriptionEntry; score: number }[] = [];
+	const scored: { entry: DescriptionEntry; score: number }[] = [];
 
-  for (const ps of propertySetArray) {
-    const score = calculateSearchScore(ps.name, ps.shortDefinition, query);
-    if (score > 0) {
-      scored.push({ entry: ps, score });
-    }
-  }
+	for (const ps of propertySetArray) {
+		const score = calculateSearchScore(ps.name, ps.shortDefinition, query);
+		if (score > 0) {
+			scored.push({ entry: ps, score });
+		}
+	}
 
-  // スコア降順 → 同スコア内は名前昇順
-  scored.sort((a, b) => b.score - a.score || a.entry.name.localeCompare(b.entry.name));
+	// スコア降順 → 同スコア内は名前昇順
+	scored.sort((a, b) => b.score - a.score || a.entry.name.localeCompare(b.entry.name));
 
-  const total = scored.length;
-  const results = scored.slice(offset, offset + limit).map((s) => s.entry);
+	const total = scored.length;
+	const results = scored.slice(offset, offset + limit).map((s) => s.entry);
 
-  return { results, total, hasMore: total > offset + limit };
+	return { results, total, hasMore: total > offset + limit };
 }
 
 // ── 継承ツリー ────────────────────────────────────────
 
 export interface InheritanceNode {
-  name: string;
-  isAbstract: boolean;
-  children: InheritanceNode[];
+	name: string;
+	isAbstract: boolean;
+	children: InheritanceNode[];
 }
 
 /**
  * 指定エンティティから下方向の継承ツリーを構築する。
  */
 export function getInheritanceTree(name: string, depth: number = 5): InheritanceNode | undefined {
-  const entity = getEntity(name);
-  if (!entity) return undefined;
+	const entity = getEntity(name);
+	if (!entity) return undefined;
 
-  function buildTree(entityName: string, currentDepth: number): InheritanceNode {
-    const e = getEntity(entityName);
-    if (!e) return { name: entityName, isAbstract: false, children: [] };
+	function buildTree(entityName: string, currentDepth: number): InheritanceNode {
+		const e = getEntity(entityName);
+		if (!e) return { name: entityName, isAbstract: false, children: [] };
 
-    const children =
-      currentDepth < depth ? e.subtypes.map((st) => buildTree(st, currentDepth + 1)) : [];
+		const children =
+			currentDepth < depth ? e.subtypes.map((st) => buildTree(st, currentDepth + 1)) : [];
 
-    return {
-      name: e.name,
-      isAbstract: e.isAbstract,
-      children,
-    };
-  }
+		return {
+			name: e.name,
+			isAbstract: e.isAbstract,
+			children,
+		};
+	}
 
-  return buildTree(name, 0);
+	return buildTree(name, 0);
 }
 
 /**
  * 指定エンティティから上方向の祖先チェーンを取得する。
  */
 export function getAncestorChain(name: string): string[] {
-  const entity = getEntity(name);
-  if (!entity) return [];
-  return [name, ...entity.ancestors];
+	const entity = getEntity(name);
+	if (!entity) return [];
+	return [name, ...entity.ancestors];
 }
 
 // ── 統計情報 ──────────────────────────────────────────
 
 export function getStatistics(): Record<string, number> {
-  return schemaData?.statistics ?? {};
+	return schemaData?.statistics ?? {};
 }

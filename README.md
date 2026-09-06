@@ -152,7 +152,7 @@ The server loads three pre-built JSON data files at startup and builds in-memory
 
 ### Prerequisites
 
-- Node.js >= 22
+- Node.js >= 22.12 (22 and 24 are verified in CI)
 - Python 3 + [IfcOpenShell](https://ifcopenshell.org/) (only for data regeneration)
 
 ### Commands
@@ -163,18 +163,39 @@ npm run dev            # Watch mode with tsx
 npm test               # Run all tests (unit + e2e)
 npm run test:unit      # Unit tests only
 npm run test:e2e       # E2E integration tests
-npm run lint           # ESLint check
-npm run format         # Prettier formatting
+npm run lint           # Biome lint
+npm run format         # Biome formatting
+npm run check          # Biome lint + format + import order (used in CI)
 npm run prepare-data   # Regenerate data from raw sources (requires Python)
 ```
 
+### Connecting a local build to Claude Desktop
+
+To test changes before publishing, point Claude Desktop at the built file instead of the npm package. Add an entry with a distinct name (for example `ifc-core-dev`) to `claude_desktop_config.json`, using the absolute path to your clone:
+
+```json
+{
+  "mcpServers": {
+    "ifc-core-dev": {
+      "command": "node",
+      "args": ["/absolute/path/to/ifc-core-mcp/dist/index.js"]
+    }
+  }
+}
+```
+
+Notes:
+
+- `dist/` is not rebuilt automatically. After editing `src/`, run `npm run build` and restart Claude Desktop. (`npm run dev` keeps stdio for its own watcher, so it cannot be used as the Desktop entry point.)
+- Claude Desktop is launched from the GUI, so `node` installed via nvm / volta may not be on its PATH. If the server fails to start, replace `"command": "node"` with the absolute path printed by `which node`.
+
 ### Tech Stack
 
-- **Runtime**: TypeScript (strict), Node.js
-- **MCP SDK**: `@modelcontextprotocol/sdk`
-- **Validation**: Zod
+- **Runtime**: TypeScript 7 (strict), Node.js
+- **MCP SDK**: `@modelcontextprotocol/server` v2 (`serveStdio`; serves both the 2025 and 2026-07-28 protocol revisions)
+- **Validation**: Zod 4
 - **Testing**: Vitest (unit + e2e with actual MCP client)
-- **Linting**: ESLint + Prettier
+- **Linting / Formatting**: Biome
 - **CI/CD**: GitHub Actions (lint → test → build → publish)
 
 ## Roadmap
